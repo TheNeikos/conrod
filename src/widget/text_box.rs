@@ -22,10 +22,11 @@ const TEXT_PADDING: Scalar = 5.0;
 
 /// A widget for displaying and mutating a given one-line text `String`. It's reaction is
 /// triggered upon pressing of the `Enter`/`Return` key.
-pub struct TextBox<'a, F> {
+pub struct TextBox<'a, F, G> {
     common: widget::CommonBuilder,
     text: &'a mut String,
     maybe_react: Option<F>,
+    maybe_filter: Option<G>,
     style: Style,
     enabled: bool,
 }
@@ -283,29 +284,37 @@ fn get_new_interaction(over_elem: Elem, prev_interaction: Interaction, mouse: Mo
     }
 }
 
-impl<'a, F> TextBox<'a, F> {
+impl<'a, F, G> TextBox<'a, F, G> {
 
     /// Construct a TextBox widget.
-    pub fn new(text: &'a mut String) -> TextBox<'a, F> {
+    pub fn new(text: &'a mut String) -> TextBox<'a, F, G> {
         TextBox {
             common: widget::CommonBuilder::new(),
             text: text,
             maybe_react: None,
+            maybe_filter: None,
             style: Style::new(),
             enabled: true,
         }
     }
 
     /// Set the font size of the text.
-    pub fn font_size(mut self, font_size: FontSize) -> TextBox<'a, F> {
+    pub fn font_size(mut self, font_size: FontSize) -> TextBox<'a, F, G> {
         self.style.maybe_font_size = Some(font_size);
         self
     }
 
     /// Set the reaction for the TextBox. It will be triggered upon pressing of the
     /// `Enter`/`Return` key.
-    pub fn react(mut self, reaction: F) -> TextBox<'a, F> {
+    pub fn react(mut self, reaction: F) -> TextBox<'a, F, G> {
         self.maybe_react = Some(reaction);
+        self
+    }
+
+    /// Set the filter for the TextBox. It will be triggered upon entering text
+    /// and return a bool, if it is `true` the value will be added, otherwise discarded.
+    pub fn filter(mut self, filter: G) -> TextBox<'a, F, G> {
+        self.maybe_filter = Some(filter);
         self
     }
 
@@ -317,9 +326,10 @@ impl<'a, F> TextBox<'a, F> {
 
 }
 
-impl<'a, F> Widget for TextBox<'a, F>
+impl<'a, F, G> Widget for TextBox<'a, F, G>
     where
-        F: FnMut(&mut String)
+        F: FnMut(&mut String),
+        G: FnMut(&mut String, char) -> bool
 {
     type State = State;
     type Style = Style;
@@ -422,19 +432,29 @@ impl<'a, F> Widget for TextBox<'a, F>
             let mut cursor = captured.cursor;
 
             // Check for entered text.
-            for text in input.entered_text {
-                if text.chars().count() == 0 { continue; }
+            for input_text in input.entered_text {
+                if input_text.chars().count() == 0 { continue; }
+
+                {
+                    let TextBox { ref mut maybe_filter, ref mut text, .. } = self;
+                    if let Some(ref mut filter) =  *maybe_filter {
+                        if !input_text.chars().all(|ch| filter(*text, ch)) {
+                            continue;
+                        }
+                    }
+                }
+
 
                 let max_w = pad_dim[0] - TEXT_PADDING * 2.0;
-                if text_w + glyph_cache.width(font_size, &text) > max_w { continue; }
+                if text_w + glyph_cache.width(font_size, &input_text) > max_w { continue; }
 
                 let end: String = self.text.chars().skip(cursor.end).collect();
                 let start: String = self.text.chars().take(cursor.start).collect();
                 self.text.clear();
                 self.text.push_str(&start);
-                self.text.push_str(&text);
+                self.text.push_str(&input_text);
                 self.text.push_str(&end);
-                cursor.shift(text.chars().count() as i32);
+                cursor.shift(input_text.chars().count() as i32);
             }
 
             // Check for control keys.
@@ -561,7 +581,7 @@ impl<'a, F> Widget for TextBox<'a, F>
                                      .height(font_size as f64)).shift_x(text_x.floor());
             (None, text_form)
         };
- 
+
         // Chain the Forms and shift them into position.
         let form_chain = Some(frame_form).into_iter()
             .chain(Some(inner_form))
@@ -618,14 +638,14 @@ impl Style {
 
 }
 
-impl<'a, F> Colorable for TextBox<'a, F> {
+impl<'a, F, G> Colorable for TextBox<'a, F, G> {
     fn color(mut self, color: Color) -> Self {
         self.style.maybe_color = Some(color);
         self
     }
 }
 
-impl<'a, F> Frameable for TextBox<'a, F> {
+impl<'a, F, G> Frameable for TextBox<'a, F, G> {
     fn frame(mut self, width: f64) -> Self {
         self.style.maybe_frame = Some(width);
         self
