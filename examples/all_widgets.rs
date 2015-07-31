@@ -1,4 +1,4 @@
-//! 
+//!
 //!
 //! A demonstration of all widgets available in Conrod.
 //!
@@ -398,6 +398,7 @@ fn draw_ui(c: Context, gl: &mut GlGraphics, ui: &mut Ui, demo: &mut DemoApp) {
             .frame(demo.frame_width)
             .frame_color(demo.bg_color.invert().plain_contrast())
             .color(demo.bg_color.invert())
+            .filter(|_string: &mut String, _ch: char|{true})
             .react(|_string: &mut String|{})
             .set(ENVELOPE_EDITOR + (i * 2), ui);
 
